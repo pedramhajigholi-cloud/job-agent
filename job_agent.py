@@ -18,7 +18,7 @@ import anthropic
 #  CONFIGURATION
 # ============================================================
 
-# Swedish job search queries — aligned with 7 target roles
+# Swedish job search queries — aligned with target roles
 JOB_QUERIES_SE = [
     "project manager",
     "projektledare",
@@ -27,9 +27,11 @@ JOB_QUERIES_SE = [
     "project coordinator",
     "projektkoordinator",
     "operations coordinator",
-    "consultant project manager",
-    "konsult projektledare",
     "delivery coordinator",
+    "management consultant",
+    "digital consultant",
+    "transformation consultant",
+    "IT-konsult",
 ]
 
 # Norwegian job search queries
@@ -40,6 +42,9 @@ JOB_QUERIES_NO = [
     "program manager",
     "project coordinator",
     "prosjektkoordinator",
+    "management consultant",
+    "digital konsulent",
+    "IT konsulent",
 ]
 
 # Danish job search queries
@@ -50,6 +55,9 @@ JOB_QUERIES_DK = [
     "program manager",
     "project coordinator",
     "projektkoordinator",
+    "management consultant",
+    "digital konsulent",
+    "IT konsulent",
 ]
 
 # Swedish municipality codes
@@ -117,6 +125,7 @@ DONT_WANT = """
 - Companies going through bankruptcy or major downsizing
 - Roles with no growth potential or learning trajectory
 - Junior roles that are clearly below the candidate's experience level
+- Roles requiring fluency in Norwegian or Danish (candidate speaks Swedish and English only)
 """
 
 # ============================================================
