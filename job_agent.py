@@ -215,7 +215,7 @@ def fetch_jobs_norway(queries, limit_per_query=10):
     for query in queries:
         try:
             r = requests.get(
-                "https://arbeidsplassen.nav.no/public-feed/api/v1/ads",
+                "https://api.arbeidsplassen.nav.no/public-feed/api/v1/ads",
                 params={
                     "q": query,
                     "size": limit_per_query,
@@ -315,14 +315,14 @@ def fetch_jobs_denmark(queries, limit_per_query=10):
 def analyze_jobs(jobs, profile, dont_want):
     # Send up to 40 jobs to Claude for analysis
     sample = []
-    for i, j in enumerate(jobs[:40]):
+    for i, j in enumerate(jobs[:25]):
         sample.append({
             "id":        i,
             "title":     j.get("headline", ""),
             "company":   j.get("employer", {}).get("name", ""),
             "location":  j.get("workplace_address", {}).get("municipality", ""),
             "country":   j.get("_country", "Sweden"),
-            "desc":      (j.get("description", {}).get("text", "") or "")[:500],
+            "desc":      (j.get("description", {}).get("text", "") or "")[:300].replace('"', "'").replace('\n', ' '),
             "url":       j.get("webpage_url", "") or j.get("application_details", {}).get("url", ""),
             "published": (j.get("publication_date", "") or "")[:10],
         })
@@ -365,17 +365,23 @@ Respond ONLY with JSON (no backticks or markdown):
 
 Return top 12 jobs sorted by score descending. JSON only."""
 
-    try:
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = msg.content[0].text.strip().replace("```json", "").replace("```", "")
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"Warning: Claude returned unexpected format: {e}")
-        raise
+    for attempt in range(2):
+        try:
+            msg = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = msg.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(f"Warning attempt {attempt+1}: Claude returned unexpected format: {e}")
+            if attempt == 0:
+                # Retry with fewer jobs
+                sample = sample[:15]
+                prompt = prompt.replace(f"({len(sample)+10} total", f"({len(sample)} total")
+            else:
+                raise
 
 
 # ============================================================
