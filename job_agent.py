@@ -131,7 +131,7 @@ Respond ONLY with JSON (no backticks or markdown):
 Return top 7 jobs sorted by score descending. JSON only."""
 
     msg = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}],
     )
