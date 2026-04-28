@@ -18,46 +18,70 @@ import anthropic
 #  CONFIGURATION
 # ============================================================
 
-# Swedish job search queries — aligned with target roles
+# Swedish job search queries
 JOB_QUERIES_SE = [
+    # Project & Delivery
     "project manager",
     "projektledare",
-    "delivery manager",
-    "program manager",
     "project coordinator",
     "projektkoordinator",
-    "operations coordinator",
+    "delivery manager",
     "delivery coordinator",
+    "program manager",
+    # Operations & Business
+    "operations coordinator",
+    "operations manager",
+    "verksamhetsutvecklare",
+    "business analyst",
+    # Consulting
     "management consultant",
+    "IT-konsult",
     "digital consultant",
     "transformation consultant",
-    "IT-konsult",
+    # Change & Implementation
+    "implementation manager",
+    "change manager",
+    "förändringsledare",
+    # Product & Agile
+    "product owner",
+    "produktägare",
+    "scrum master",
 ]
 
 # Norwegian job search queries
 JOB_QUERIES_NO = [
     "project manager",
     "prosjektleder",
-    "delivery manager",
-    "program manager",
     "project coordinator",
     "prosjektkoordinator",
+    "delivery manager",
+    "program manager",
+    "operations manager",
     "management consultant",
-    "digital konsulent",
     "IT konsulent",
+    "digital konsulent",
+    "implementation manager",
+    "change manager",
+    "product owner",
+    "business analyst",
 ]
 
 # Danish job search queries
 JOB_QUERIES_DK = [
     "project manager",
     "projektleder",
-    "delivery manager",
-    "program manager",
     "project coordinator",
     "projektkoordinator",
+    "delivery manager",
+    "program manager",
+    "operations manager",
     "management consultant",
-    "digital konsulent",
     "IT konsulent",
+    "digital konsulent",
+    "implementation manager",
+    "change manager",
+    "product owner",
+    "business analyst",
 ]
 
 # Swedish municipality codes
@@ -108,13 +132,21 @@ IDEAL COMPANY TYPES (in priority order):
 5. Any industry including automotive — neutral on sector
 
 TARGET ROLES (any of these are relevant):
-- Project Manager / Senior Project Manager
+- Project Manager / Senior Project Manager / Projektledare
+- Project Coordinator / Projektkoordinator
 - Delivery Manager
-- Program Manager
-- Consultant / Senior Consultant (PM or ops focus)
-- Project Coordinator
-- Operations Coordinator
 - Delivery Coordinator
+- Program Manager
+- Operations Coordinator / Operations Manager
+- Management Consultant
+- IT Consultant (PM/ops focus) / IT-konsult
+- Digital Consultant / Transformation Consultant
+- Implementation Manager
+- Change Manager / Förändringsledare
+- Verksamhetsutvecklare
+- Business Analyst
+- Product Owner / Produktägare
+- Scrum Master
 """
 
 DONT_WANT = """
@@ -183,18 +215,21 @@ def fetch_jobs_norway(queries, limit_per_query=10):
     for query in queries:
         try:
             r = requests.get(
-                "https://arbeidsplassen.nav.no/api/v2/ads/search",
-                params={"q": query, "size": limit_per_query},
+                "https://arbeidsplassen.nav.no/public-feed/api/v1/ads",
+                params={
+                    "q": query,
+                    "size": limit_per_query,
+                    "municipal": "0301",  # Oslo municipality code
+                },
                 headers={"Accept": "application/json"},
                 timeout=15,
             )
             r.raise_for_status()
             data = r.json()
             for job in data.get("content", []):
-                job_id = str(job.get("id", ""))
+                job_id = str(job.get("uuid", job.get("id", "")))
                 if job_id not in seen_ids:
                     seen_ids.add(job_id)
-                    # Normalize to common format
                     normalized = {
                         "id": job_id,
                         "headline": job.get("title", ""),
@@ -203,7 +238,7 @@ def fetch_jobs_norway(queries, limit_per_query=10):
                             "municipality": job.get("location", {}).get("municipal", "Oslo")
                         },
                         "description": {"text": job.get("description", "")},
-                        "webpage_url": job.get("applicationUrl", "") or job.get("source", ""),
+                        "webpage_url": job.get("applicationUrl", "") or f"https://arbeidsplassen.nav.no/stillinger/stilling/{job_id}",
                         "publication_date": job.get("published", ""),
                         "_country": "Norway"
                     }
@@ -224,34 +259,46 @@ def fetch_jobs_denmark(queries, limit_per_query=10):
 
     for query in queries:
         try:
-            r = requests.get(
-                "https://job.jobnet.dk/CV/FindWork",
-                params={
-                    "Offset": 0,
-                    "SortValue": "BestMatch",
-                    "SearchString": query,
-                    "Region": "Storkøbenhavn",
-                    "PageSize": limit_per_query,
-                },
-                headers={"Accept": "application/json"},
-                timeout=15,
-            )
+            # Try multiple region name variants to maximize coverage
+            all_region_results = []
+            for region in ["storkoebenhavn", "copenhagen", "koebenhavn"]:
+                try:
+                    rr = requests.get(
+                        "https://api.jobindex.dk/api/jobad/search",
+                        params={
+                            "q": query,
+                            "maxresults": limit_per_query,
+                            "region": region,
+                        },
+                        headers={"Accept": "application/json"},
+                        timeout=15,
+                    )
+                    if rr.status_code == 200:
+                        all_region_results.extend(rr.json().get("result", []))
+                        break  # Stop if one region works
+                except Exception:
+                    continue
+            # Create a fake response object to reuse existing parsing
+            class FakeResponse:
+                def raise_for_status(self): pass
+                def json(self): return {"result": all_region_results}
+            r = FakeResponse()
             r.raise_for_status()
             data = r.json()
-            for job in data.get("JobPositionPostings", []):
-                job_id = str(job.get("Id", ""))
+            for job in data.get("result", []):
+                job_id = str(job.get("jobadid", ""))
                 if job_id not in seen_ids:
                     seen_ids.add(job_id)
                     normalized = {
                         "id": job_id,
-                        "headline": job.get("Headline", ""),
-                        "employer": {"name": job.get("EmployerName", "")},
+                        "headline": job.get("header", ""),
+                        "employer": {"name": job.get("company_name", "")},
                         "workplace_address": {
-                            "municipality": job.get("WorkPlaceAddress", {}).get("City", "Copenhagen")
+                            "municipality": job.get("location", "Copenhagen")
                         },
-                        "description": {"text": job.get("JobPositionInformation", {}).get("Description", "")},
-                        "webpage_url": f"https://job.jobnet.dk/CV/FindWork/Details/{job_id}",
-                        "publication_date": job.get("PostingCreated", ""),
+                        "description": {"text": job.get("body_text", "")},
+                        "webpage_url": job.get("url", ""),
+                        "publication_date": job.get("pub_date", ""),
                         "_country": "Denmark"
                     }
                     all_jobs.append(normalized)
@@ -316,7 +363,7 @@ Respond ONLY with JSON (no backticks or markdown):
   "summary": "<1 sentence summarizing today's search results>"
 }}
 
-Return top 8 jobs sorted by score descending. JSON only."""
+Return top 12 jobs sorted by score descending. JSON only."""
 
     try:
         msg = client.messages.create(
